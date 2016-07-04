@@ -19,7 +19,9 @@
 
 package org.elasticsearch.cloud.azure;
 
+import com.microsoft.azure.storage.LocationMode;
 import com.microsoft.azure.storage.StorageException;
+
 import org.elasticsearch.cloud.azure.storage.AzureStorageService;
 import org.elasticsearch.cloud.azure.storage.AzureStorageService.Storage;
 import org.elasticsearch.cloud.azure.storage.AzureStorageServiceMock;
@@ -29,6 +31,7 @@ import org.elasticsearch.plugin.repository.azure.AzureRepositoryPlugin;
 import org.elasticsearch.plugins.Plugin;
 import org.elasticsearch.repositories.RepositoryMissingException;
 import org.elasticsearch.test.store.MockFSDirectoryService;
+import org.elasticsearch.test.store.MockFSIndexStore;
 import org.junit.After;
 import org.junit.Before;
 
@@ -76,19 +79,14 @@ public abstract class AbstractAzureRepositoryServiceTestCase extends AbstractAzu
 
     @Override
     protected Settings nodeSettings(int nodeOrdinal) {
-        Settings.Builder builder = Settings.settingsBuilder()
-                .put(Storage.CONTAINER, "snapshots");
-
-        // We use sometime deprecated settings in tests
-        builder.put(Storage.ACCOUNT, "mock_azure_account")
-                .put(Storage.KEY, "mock_azure_key");
-
+        Settings.Builder builder = Settings.builder()
+                .put(Storage.CONTAINER_SETTING.getKey(), "snapshots");
         return builder.build();
     }
 
     @Override
     protected Collection<Class<? extends Plugin>> nodePlugins() {
-        return pluginList(AzureRepositoryPlugin.class, TestPlugin.class);
+        return pluginList(AzureRepositoryPlugin.class, TestPlugin.class, MockFSIndexStore.TestPlugin.class);
     }
 
     @Override
@@ -96,8 +94,8 @@ public abstract class AbstractAzureRepositoryServiceTestCase extends AbstractAzu
         // During restore we frequently restore index to exactly the same state it was before, that might cause the same
         // checksum file to be written twice during restore operation
         return Settings.builder().put(super.indexSettings())
-                .put(MockFSDirectoryService.RANDOM_PREVENT_DOUBLE_WRITE, false)
-                .put(MockFSDirectoryService.RANDOM_NO_DELETE_OPEN_FILE, false)
+                .put(MockFSDirectoryService.RANDOM_PREVENT_DOUBLE_WRITE_SETTING.getKey(), false)
+                .put(MockFSDirectoryService.RANDOM_NO_DELETE_OPEN_FILE_SETTING.getKey(), false)
                 .put(IndexMetaData.SETTING_NUMBER_OF_REPLICAS, 0)
                 .build();
     }
@@ -115,6 +113,6 @@ public abstract class AbstractAzureRepositoryServiceTestCase extends AbstractAzu
         String container = internalCluster().getInstance(Settings.class).get("repositories.azure.container");
         logger.info("--> remove blobs in container [{}]", container);
         AzureStorageService client = internalCluster().getInstance(AzureStorageService.class);
-        client.deleteFiles(container, path);
+        client.deleteFiles(null, LocationMode.PRIMARY_ONLY, container, path);
     }
 }

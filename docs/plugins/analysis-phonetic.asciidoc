@@ -13,7 +13,7 @@ This plugin can be installed using the plugin manager:
 
 [source,sh]
 ----------------------------------------------------------------
-sudo bin/plugin install analysis-phonetic
+sudo bin/elasticsearch-plugin install analysis-phonetic
 ----------------------------------------------------------------
 
 The plugin must be installed on every node in the cluster, and each node must
@@ -27,7 +27,7 @@ The plugin can be removed with the following command:
 
 [source,sh]
 ----------------------------------------------------------------
-sudo bin/plugin remove analysis-phonetic
+sudo bin/elasticsearch-plugin remove analysis-phonetic
 ----------------------------------------------------------------
 
 The node must be stopped before removing the plugin.
@@ -42,7 +42,7 @@ The `phonetic` token filter takes the following settings:
     Which phonetic encoder to use.  Accepts `metaphone` (default),
     `doublemetaphone`, `soundex`, `refinedsoundex`, `caverphone1`,
     `caverphone2`, `cologne`, `nysiis`, `koelnerphonetik`, `haasephonetik`,
-    `beidermorse`.
+    `beidermorse`, `daitch_mokotoff`.
 
 `replace`::
 

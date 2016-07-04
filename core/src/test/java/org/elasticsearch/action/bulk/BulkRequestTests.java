@@ -21,6 +21,7 @@ package org.elasticsearch.action.bulk;
 
 import org.apache.lucene.util.Constants;
 import org.elasticsearch.action.ActionRequest;
+import org.elasticsearch.action.ActionRequestValidationException;
 import org.elasticsearch.action.delete.DeleteRequest;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.action.update.UpdateRequest;
@@ -36,8 +37,11 @@ import java.util.List;
 import java.util.Map;
 
 import static org.elasticsearch.test.StreamsUtils.copyToStringFromClasspath;
+import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.instanceOf;
+import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.notNullValue;
 
 public class BulkRequestTests extends ESTestCase {
@@ -106,7 +110,7 @@ public class BulkRequestTests extends ESTestCase {
 
     public void testBulkAddIterable() {
         BulkRequest bulkRequest = Requests.bulkRequest();
-        List<ActionRequest> requests = new ArrayList<>();
+        List<ActionRequest<?>> requests = new ArrayList<>();
         requests.add(new IndexRequest("test", "test", "id").source("field", "value"));
         requests.add(new UpdateRequest("test", "test", "id").doc("field", "value"));
         requests.add(new DeleteRequest("test", "test", "id"));
@@ -146,9 +150,9 @@ public class BulkRequestTests extends ESTestCase {
         BulkRequest bulkRequest = new BulkRequest();
         try {
             bulkRequest.add(bulkAction.getBytes(StandardCharsets.UTF_8), 0, bulkAction.length(), null, null);
-            fail("should have thrown an exception about the unknown paramater _foo");
+            fail("should have thrown an exception about the unknown parameter _foo");
         } catch (IllegalArgumentException e) {
-            assertThat("message contains error about the unknown paramater _foo: " + e.getMessage(),
+            assertThat("message contains error about the unknown parameter _foo: " + e.getMessage(),
                     e.getMessage().contains("Action/metadata line [3] contains an unknown parameter [_foo]"), equalTo(true));
         }
     }
@@ -170,5 +174,40 @@ public class BulkRequestTests extends ESTestCase {
         BulkRequest bulkRequest = new BulkRequest();
         bulkRequest.add(bulkAction.getBytes(StandardCharsets.UTF_8), 0, bulkAction.length(), null, null);
         assertThat(bulkRequest.numberOfActions(), equalTo(9));
+    }
+
+    // issue 7361
+    public void testBulkRequestWithRefresh() throws Exception {
+        BulkRequest bulkRequest = new BulkRequest();
+        // We force here a "id is missing" validation error
+        bulkRequest.add(new DeleteRequest("index", "type", null).refresh(true));
+        // We force here a "type is missing" validation error
+        bulkRequest.add(new DeleteRequest("index", null, "id"));
+        bulkRequest.add(new DeleteRequest("index", "type", "id").refresh(true));
+        bulkRequest.add(new UpdateRequest("index", "type", "id").doc("{}").refresh(true));
+        bulkRequest.add(new IndexRequest("index", "type", "id").source("{}").refresh(true));
+        ActionRequestValidationException validate = bulkRequest.validate();
+        assertThat(validate, notNullValue());
+        assertThat(validate.validationErrors(), not(empty()));
+        assertThat(validate.validationErrors(), contains(
+                "Refresh is not supported on an item request, set the refresh flag on the BulkRequest instead.",
+                "id is missing",
+                "type is missing",
+                "Refresh is not supported on an item request, set the refresh flag on the BulkRequest instead.",
+                "Refresh is not supported on an item request, set the refresh flag on the BulkRequest instead.",
+                "Refresh is not supported on an item request, set the refresh flag on the BulkRequest instead."));
+    }
+
+    // issue 15120
+    public void testBulkNoSource() throws Exception {
+        BulkRequest bulkRequest = new BulkRequest();
+        bulkRequest.add(new UpdateRequest("index", "type", "id"));
+        bulkRequest.add(new IndexRequest("index", "type", "id"));
+        ActionRequestValidationException validate = bulkRequest.validate();
+        assertThat(validate, notNullValue());
+        assertThat(validate.validationErrors(), not(empty()));
+        assertThat(validate.validationErrors(), contains(
+                "script or doc is missing",
+                "source is missing"));
     }
 }

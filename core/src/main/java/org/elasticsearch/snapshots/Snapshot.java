@@ -22,14 +22,15 @@ package org.elasticsearch.snapshots;
 import org.elasticsearch.ElasticsearchParseException;
 import org.elasticsearch.Version;
 import org.elasticsearch.common.ParseFieldMatcher;
-import org.elasticsearch.common.xcontent.*;
+import org.elasticsearch.common.xcontent.FromXContentBuilder;
+import org.elasticsearch.common.xcontent.ToXContent;
+import org.elasticsearch.common.xcontent.XContentBuilder;
+import org.elasticsearch.common.xcontent.XContentParser;
 
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-
-import static java.util.Collections.*;
 
 /**
  * Represent information about snapshot
@@ -93,7 +94,7 @@ public class Snapshot implements Comparable<Snapshot>, ToXContent, FromXContentB
      * Special constructor for the prototype object
      */
     private Snapshot() {
-        this("", (List<String>) EMPTY_LIST, 0);
+        this("", Collections.emptyList(), 0);
     }
 
     private static SnapshotState snapshotState(String reason, List<SnapshotShardFailure> shardFailures) {
@@ -237,17 +238,17 @@ public class Snapshot implements Comparable<Snapshot>, ToXContent, FromXContentB
     }
 
     static final class Fields {
-        static final XContentBuilderString SNAPSHOT = new XContentBuilderString("snapshot");
-        static final XContentBuilderString NAME = new XContentBuilderString("name");
-        static final XContentBuilderString VERSION_ID = new XContentBuilderString("version_id");
-        static final XContentBuilderString INDICES = new XContentBuilderString("indices");
-        static final XContentBuilderString STATE = new XContentBuilderString("state");
-        static final XContentBuilderString REASON = new XContentBuilderString("reason");
-        static final XContentBuilderString START_TIME = new XContentBuilderString("start_time");
-        static final XContentBuilderString END_TIME = new XContentBuilderString("end_time");
-        static final XContentBuilderString TOTAL_SHARDS = new XContentBuilderString("total_shards");
-        static final XContentBuilderString SUCCESSFUL_SHARDS = new XContentBuilderString("successful_shards");
-        static final XContentBuilderString FAILURES = new XContentBuilderString("failures");
+        static final String SNAPSHOT = "snapshot";
+        static final String NAME = "name";
+        static final String VERSION_ID = "version_id";
+        static final String INDICES = "indices";
+        static final String STATE = "state";
+        static final String REASON = "reason";
+        static final String START_TIME = "start_time";
+        static final String END_TIME = "end_time";
+        static final String TOTAL_SHARDS = "total_shards";
+        static final String SUCCESSFUL_SHARDS = "successful_shards";
+        static final String FAILURES = "failures";
     }
 
 

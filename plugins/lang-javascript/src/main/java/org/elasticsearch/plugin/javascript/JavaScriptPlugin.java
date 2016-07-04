@@ -20,6 +20,7 @@
 package org.elasticsearch.plugin.javascript;
 
 import org.elasticsearch.plugins.Plugin;
+import org.elasticsearch.script.ScriptEngineRegistry;
 import org.elasticsearch.script.ScriptModule;
 import org.elasticsearch.script.javascript.JavaScriptScriptEngineService;
 
@@ -27,6 +28,11 @@ import org.elasticsearch.script.javascript.JavaScriptScriptEngineService;
  *
  */
 public class JavaScriptPlugin extends Plugin {
+
+    static {
+        // install rhino policy on plugin init
+        JavaScriptScriptEngineService.init();
+    }
 
     @Override
     public String name() {
@@ -39,6 +45,6 @@ public class JavaScriptPlugin extends Plugin {
     }
 
     public void onModule(ScriptModule module) {
-        module.addScriptEngine(JavaScriptScriptEngineService.class);
+        module.addScriptEngine(new ScriptEngineRegistry.ScriptEngineRegistration(JavaScriptScriptEngineService.class, JavaScriptScriptEngineService.TYPES));
     }
 }

@@ -19,7 +19,14 @@
 
 package org.elasticsearch.cluster.routing;
 
+import org.elasticsearch.common.bytes.BytesReference;
+import org.elasticsearch.common.xcontent.ToXContent;
+import org.elasticsearch.common.xcontent.XContentFactory;
+import org.elasticsearch.common.xcontent.XContentType;
+import org.elasticsearch.index.Index;
 import org.elasticsearch.test.ESTestCase;
+
+import java.io.IOException;
 
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.not;
@@ -31,11 +38,11 @@ import static org.hamcrest.Matchers.nullValue;
 public class AllocationIdTests extends ESTestCase {
     public void testShardToStarted() {
         logger.info("-- create unassigned shard");
-        ShardRouting shard = ShardRouting.newUnassigned("test", 0, null, true, new UnassignedInfo(UnassignedInfo.Reason.INDEX_CREATED, null));
+        ShardRouting shard = ShardRouting.newUnassigned(new Index("test","_na_"), 0, null, true, new UnassignedInfo(UnassignedInfo.Reason.INDEX_CREATED, null));
         assertThat(shard.allocationId(), nullValue());
 
         logger.info("-- initialize the shard");
-        shard.initialize("node1", -1);
+        shard.initialize("node1", null, -1);
         AllocationId allocationId = shard.allocationId();
         assertThat(allocationId, notNullValue());
         assertThat(allocationId.getId(), notNullValue());
@@ -51,8 +58,8 @@ public class AllocationIdTests extends ESTestCase {
 
     public void testSuccessfulRelocation() {
         logger.info("-- build started shard");
-        ShardRouting shard = ShardRouting.newUnassigned("test", 0, null, true, new UnassignedInfo(UnassignedInfo.Reason.INDEX_CREATED, null));
-        shard.initialize("node1", -1);
+        ShardRouting shard = ShardRouting.newUnassigned(new Index("test","_na_"), 0, null, true, new UnassignedInfo(UnassignedInfo.Reason.INDEX_CREATED, null));
+        shard.initialize("node1", null, -1);
         shard.moveToStarted();
 
         AllocationId allocationId = shard.allocationId();
@@ -74,8 +81,8 @@ public class AllocationIdTests extends ESTestCase {
 
     public void testCancelRelocation() {
         logger.info("-- build started shard");
-        ShardRouting shard = ShardRouting.newUnassigned("test", 0, null, true, new UnassignedInfo(UnassignedInfo.Reason.INDEX_CREATED, null));
-        shard.initialize("node1", -1);
+        ShardRouting shard = ShardRouting.newUnassigned(new Index("test","_na_"), 0, null, true, new UnassignedInfo(UnassignedInfo.Reason.INDEX_CREATED, null));
+        shard.initialize("node1", null, -1);
         shard.moveToStarted();
 
         AllocationId allocationId = shard.allocationId();
@@ -94,8 +101,8 @@ public class AllocationIdTests extends ESTestCase {
 
     public void testMoveToUnassigned() {
         logger.info("-- build started shard");
-        ShardRouting shard = ShardRouting.newUnassigned("test", 0, null, true, new UnassignedInfo(UnassignedInfo.Reason.INDEX_CREATED, null));
-        shard.initialize("node1", -1);
+        ShardRouting shard = ShardRouting.newUnassigned(new Index("test","_na_"), 0, null, true, new UnassignedInfo(UnassignedInfo.Reason.INDEX_CREATED, null));
+        shard.initialize("node1", null, -1);
         shard.moveToStarted();
 
         logger.info("-- move to unassigned");
@@ -105,8 +112,8 @@ public class AllocationIdTests extends ESTestCase {
 
     public void testReinitializing() {
         logger.info("-- build started shard");
-        ShardRouting shard = ShardRouting.newUnassigned("test", 0, null, true, new UnassignedInfo(UnassignedInfo.Reason.INDEX_CREATED, null));
-        shard.initialize("node1", -1);
+        ShardRouting shard = ShardRouting.newUnassigned(new Index("test","_na_"), 0, null, true, new UnassignedInfo(UnassignedInfo.Reason.INDEX_CREATED, null));
+        shard.initialize("node1", null, -1);
         shard.moveToStarted();
         AllocationId allocationId = shard.allocationId();
 
@@ -115,5 +122,15 @@ public class AllocationIdTests extends ESTestCase {
         assertThat(shard.allocationId().getId(), notNullValue());
         assertThat(shard.allocationId().getRelocationId(), nullValue());
         assertThat(shard.allocationId().getId(), not(equalTo(allocationId.getId())));
+    }
+
+    public void testSerialization() throws IOException {
+        AllocationId allocationId = AllocationId.newInitializing();
+        if (randomBoolean()) {
+            allocationId = AllocationId.newRelocation(allocationId);
+        }
+        BytesReference bytes = allocationId.toXContent(XContentFactory.jsonBuilder(), ToXContent.EMPTY_PARAMS).bytes();
+        AllocationId parsedAllocationId = AllocationId.fromXContent(XContentFactory.xContent(XContentType.JSON).createParser(bytes));
+        assertEquals(allocationId, parsedAllocationId);
     }
 }

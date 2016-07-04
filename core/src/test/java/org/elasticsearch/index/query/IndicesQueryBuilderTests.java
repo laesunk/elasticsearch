@@ -56,15 +56,7 @@ public class IndicesQueryBuilderTests extends AbstractQueryTestCase<IndicesQuery
         } else {
             expected = queryBuilder.noMatchQuery().toQuery(context);
         }
-        if (expected != null && queryBuilder.boost() != AbstractQueryBuilder.DEFAULT_BOOST) {
-            expected.setBoost(queryBuilder.boost());
-        }
-        assertEquals(query, expected);
-    }
-
-    @Override
-    protected void assertBoost(IndicesQueryBuilder queryBuilder, Query query) throws IOException {
-        //nothing to do here, boost check is already included in equality check done as part of doAssertLuceneQuery above
+        assertEquals(expected, query);
     }
 
     public void testIllegalArguments() {
@@ -75,33 +67,42 @@ public class IndicesQueryBuilderTests extends AbstractQueryTestCase<IndicesQuery
             // expected
         }
 
-        try {
-            new IndicesQueryBuilder(EmptyQueryBuilder.PROTOTYPE, (String[]) null);
-            fail("cannot be null");
-        } catch (IllegalArgumentException e) {
-            // expected
-        }
+        expectThrows(IllegalArgumentException.class, () -> new IndicesQueryBuilder(new MatchAllQueryBuilder(), (String[]) null));
+        expectThrows(IllegalArgumentException.class, () -> new IndicesQueryBuilder(new MatchAllQueryBuilder(), new String[0]));
 
-        try {
-            new IndicesQueryBuilder(EmptyQueryBuilder.PROTOTYPE, new String[0]);
-            fail("cannot be empty");
-        } catch (IllegalArgumentException e) {
-            // expected
-        }
+        IndicesQueryBuilder indicesQueryBuilder = new IndicesQueryBuilder(new MatchAllQueryBuilder(), "index");
+        expectThrows(IllegalArgumentException.class, () -> indicesQueryBuilder.noMatchQuery((QueryBuilder<?>) null));
+        expectThrows(IllegalArgumentException.class, () -> indicesQueryBuilder.noMatchQuery((String) null));
+    }
 
-        IndicesQueryBuilder indicesQueryBuilder = new IndicesQueryBuilder(EmptyQueryBuilder.PROTOTYPE, "index");
-        try {
-            indicesQueryBuilder.noMatchQuery((QueryBuilder) null);
-            fail("cannot be null");
-        } catch (IllegalArgumentException e) {
-            // expected
-        }
-
-        try {
-            indicesQueryBuilder.noMatchQuery((String) null);
-            fail("cannot be null");
-        } catch (IllegalArgumentException e) {
-            // expected
-        }
+    public void testFromJson() throws IOException {
+        String json =
+                "{\n" + 
+                "  \"indices\" : {\n" + 
+                "    \"indices\" : [ \"index1\", \"index2\" ],\n" + 
+                "    \"query\" : {\n" + 
+                "      \"term\" : {\n" + 
+                "        \"tag\" : {\n" + 
+                "          \"value\" : \"wow\",\n" + 
+                "          \"boost\" : 1.0\n" + 
+                "        }\n" + 
+                "      }\n" + 
+                "    },\n" + 
+                "    \"no_match_query\" : {\n" + 
+                "      \"term\" : {\n" + 
+                "        \"tag\" : {\n" + 
+                "          \"value\" : \"kow\",\n" + 
+                "          \"boost\" : 1.0\n" + 
+                "        }\n" + 
+                "      }\n" + 
+                "    },\n" + 
+                "    \"boost\" : 1.0\n" + 
+                "  }\n" + 
+                "}";
+        IndicesQueryBuilder parsed = (IndicesQueryBuilder) parseQuery(json);
+        checkGeneratedJson(json, parsed);
+        assertEquals(json, 2, parsed.indices().length);
+        assertEquals(json, "kow", ((TermQueryBuilder) parsed.noMatchQuery()).value());
+        assertEquals(json, "wow", ((TermQueryBuilder) parsed.innerQuery()).value());
     }
 }

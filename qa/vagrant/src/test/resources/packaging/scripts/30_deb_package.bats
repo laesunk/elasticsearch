@@ -86,7 +86,6 @@ setup() {
     # starting Elasticsearch so we don't have to wait for elasticsearch to scan for
     # them.
     install_elasticsearch_test_scripts
-    ESPLUGIN_COMMAND_USER=root install_and_check_plugin lang groovy
     start_elasticsearch_service
     run_elasticsearch_tests
 }
@@ -129,6 +128,7 @@ setup() {
     # The configuration files are still here
     assert_file_exist "/etc/elasticsearch"
     assert_file_exist "/etc/elasticsearch/elasticsearch.yml"
+    assert_file_exist "/etc/elasticsearch/jvm.options"
     assert_file_exist "/etc/elasticsearch/logging.yml"
 
     # The env file is still here
@@ -149,6 +149,7 @@ setup() {
     # all remaining files are deleted by the purge
     assert_file_not_exist "/etc/elasticsearch"
     assert_file_not_exist "/etc/elasticsearch/elasticsearch.yml"
+    assert_file_not_exist "/etc/elasticsearch/jvm.options"
     assert_file_not_exist "/etc/elasticsearch/logging.yml"
 
     assert_file_not_exist "/etc/default/elasticsearch"

@@ -44,16 +44,6 @@ A number of plugins have been contributed by our community:
 
 * https://github.com/hadashiA/elasticsearch-flavor[Elasticsearch Flavor Plugin] using
   http://mahout.apache.org/[Mahout] Collaboration filtering (by hadashiA)
-
-These community plugins appear to have been abandoned:
-
-* https://github.com/derryx/elasticsearch-changes-plugin[Elasticsearch Changes Plugin] (by Thomas Peuss)
-
-* https://github.com/mattweber/elasticsearch-mocksolrplugin[Elasticsearch Mock Solr Plugin] (by Matt Weber)
-
-* http://siren.solutions/siren/downloads/[Elasticsearch SIREn Plugin]: Nested data search (by SIREn Solutions)
-
-* https://github.com/endgameinc/elasticsearch-term-plugin[Terms Component Plugin] (by Endgame Inc.)
-
+* https://github.com/jurgc11/es-change-feed-plugin[WebSocket Change Feed Plugin] (by ForgeRock/Chris Clifton)
 
 include::delete-by-query.asciidoc[]

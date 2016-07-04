@@ -19,6 +19,10 @@
 
 package org.elasticsearch.plugin.example;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+
 import org.elasticsearch.common.component.LifecycleComponent;
 import org.elasticsearch.common.inject.AbstractModule;
 import org.elasticsearch.common.inject.Module;
@@ -27,11 +31,6 @@ import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.plugins.Plugin;
 import org.elasticsearch.repositories.RepositoriesModule;
 import org.elasticsearch.rest.action.cat.AbstractCatAction;
-
-import java.io.Closeable;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
 
 /**
  * Example of a plugin.
@@ -60,16 +59,11 @@ public class JvmExamplePlugin extends Plugin {
     }
 
     @Override
+    @SuppressWarnings("rawtypes") // Plugin use a rawtype
     public Collection<Class<? extends LifecycleComponent>> nodeServices() {
         Collection<Class<? extends LifecycleComponent>> services = new ArrayList<>();
         return services;
     }
-
-    @Override
-    public Collection<Module> indexModules(Settings indexSettings) { return Collections.emptyList();}
-
-    @Override
-    public Collection<Class<? extends Closeable>> indexServices() { return Collections.emptyList();}
 
     @Override
     public Settings additionalSettings() {

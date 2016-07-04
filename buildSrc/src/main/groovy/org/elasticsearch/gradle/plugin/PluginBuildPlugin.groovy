@@ -18,94 +18,111 @@
  */
 package org.elasticsearch.gradle.plugin
 
-import nebula.plugin.extraconfigurations.ProvidedBasePlugin
 import org.elasticsearch.gradle.BuildPlugin
-import org.elasticsearch.gradle.ElasticsearchProperties
 import org.elasticsearch.gradle.test.RestIntegTestTask
+import org.elasticsearch.gradle.test.RunTask
 import org.gradle.api.Project
-import org.gradle.api.Task
+import org.gradle.api.artifacts.Dependency
+import org.gradle.api.tasks.SourceSet
 import org.gradle.api.tasks.bundling.Zip
 
 /**
  * Encapsulates build configuration for an Elasticsearch plugin.
  */
-class PluginBuildPlugin extends BuildPlugin {
+public class PluginBuildPlugin extends BuildPlugin {
 
     @Override
-    void apply(Project project) {
+    public void apply(Project project) {
         super.apply(project)
-        project.pluginManager.apply(ProvidedBasePlugin)
-        // TODO: add target compatibility (java version) to elasticsearch properties and set for the project
         configureDependencies(project)
-        // this afterEvaluate must happen before the afterEvaluate added by integTest configure,
+        // this afterEvaluate must happen before the afterEvaluate added by integTest creation,
         // so that the file name resolution for installing the plugin will be setup
         project.afterEvaluate {
-            project.jar.configure {
-                baseName project.pluginProperties.extension.name
+            String name = project.pluginProperties.extension.name
+            project.jar.baseName = name
+            project.bundlePlugin.baseName = name
+
+            project.integTest.dependsOn(project.bundlePlugin)
+            project.tasks.run.dependsOn(project.bundlePlugin)
+            if (project.path.startsWith(':modules:')) {
+                project.integTest.clusterConfig.module(project)
+                project.tasks.run.clusterConfig.module(project)
+            } else {
+                project.integTest.clusterConfig.plugin(name, project.bundlePlugin.outputs.files)
+                project.tasks.run.clusterConfig.plugin(name, project.bundlePlugin.outputs.files)
             }
-            project.bundlePlugin.configure {
-                baseName project.pluginProperties.extension.name
-            }
-            project.integTest.configure {
-                dependsOn project.bundlePlugin
-                cluster {
-                    plugin 'installPlugin', project.bundlePlugin.outputs.files
-                }
+
+            project.namingConventions {
+                // Plugins decalare extensions of ESIntegTestCase as "Tests" instead of IT.
+                skipIntegTestInDisguise = true
             }
         }
-        Task bundle = configureBundleTask(project)
-        RestIntegTestTask.configure(project)
-        project.configurations.archives.artifacts.removeAll { it.archiveTask.is project.jar }
-        project.configurations.getByName('default').extendsFrom = []
-        project.artifacts {
-            archives bundle
-            'default' bundle
-        }
+        createIntegTestTask(project)
+        createBundleTask(project)
+        project.tasks.create('run', RunTask) // allow running ES with this plugin in the foreground of a build
     }
 
-    static void configureDependencies(Project project) {
-        String elasticsearchVersion = ElasticsearchProperties.version
+    private static void configureDependencies(Project project) {
         project.dependencies {
-            provided "org.elasticsearch:elasticsearch:${elasticsearchVersion}"
-            testCompile "org.elasticsearch:test-framework:${elasticsearchVersion}"
+            provided "org.elasticsearch:elasticsearch:${project.versions.elasticsearch}"
+            testCompile "org.elasticsearch.test:framework:${project.versions.elasticsearch}"
             // we "upgrade" these optional deps to provided for plugins, since they will run
             // with a full elasticsearch server that includes optional deps
-            // TODO: remove duplication of version here with core...
-            provided 'com.spatial4j:spatial4j:0.4.1'
-            provided 'com.vividsolutions:jts:1.13'
-            provided 'com.github.spullara.mustache.java:compiler:0.9.1'
-            provided "log4j:log4j:1.2.17"
-            provided "log4j:apache-log4j-extras:1.2.17"
-            provided "org.slf4j:slf4j-api:1.6.2"
-            provided 'net.java.dev.jna:jna:4.1.0'
+            provided "org.locationtech.spatial4j:spatial4j:${project.versions.spatial4j}"
+            provided "com.vividsolutions:jts:${project.versions.jts}"
+            provided "log4j:log4j:${project.versions.log4j}"
+            provided "log4j:apache-log4j-extras:${project.versions.log4j}"
+            provided "net.java.dev.jna:jna:${project.versions.jna}"
         }
     }
 
-    static Task configureBundleTask(Project project) {
-        PluginPropertiesTask buildProperties = project.tasks.create(name: 'pluginProperties', type: PluginPropertiesTask)
-        File pluginMetadata = project.file("src/main/plugin-metadata")
-        project.sourceSets.test {
-            output.dir(buildProperties.generatedResourcesDir, builtBy: 'pluginProperties')
-            resources {
-                srcDir pluginMetadata
-            }
-        }
-        Task bundle = project.tasks.create(name: 'bundlePlugin', type: Zip, dependsOn: [project.jar, buildProperties])
-        bundle.configure {
-            from buildProperties
-            from pluginMetadata
-            from project.jar
-            from bundle.project.configurations.runtime - bundle.project.configurations.provided
+    /** Adds an integTest task which runs rest tests */
+    private static void createIntegTestTask(Project project) {
+        RestIntegTestTask integTest = project.tasks.create('integTest', RestIntegTestTask.class)
+        integTest.mustRunAfter(project.precommit, project.test)
+        project.check.dependsOn(integTest)
+    }
+
+    /**
+     * Adds a bundlePlugin task which builds the zip containing the plugin jars,
+     * metadata, properties, and packaging files
+     */
+    private static void createBundleTask(Project project) {
+        File pluginMetadata = project.file('src/main/plugin-metadata')
+
+        // create a task to build the properties file for this plugin
+        PluginPropertiesTask buildProperties = project.tasks.create('pluginProperties', PluginPropertiesTask.class)
+
+        // add the plugin properties and metadata to test resources, so unit tests can
+        // know about the plugin (used by test security code to statically initialize the plugin in unit tests)
+        SourceSet testSourceSet = project.sourceSets.test
+        testSourceSet.output.dir(buildProperties.generatedResourcesDir, builtBy: 'pluginProperties')
+        testSourceSet.resources.srcDir(pluginMetadata)
+
+        // create the actual bundle task, which zips up all the files for the plugin
+        Zip bundle = project.tasks.create(name: 'bundlePlugin', type: Zip, dependsOn: [project.jar, buildProperties]) {
+            from buildProperties // plugin properties file
+            from pluginMetadata // metadata (eg custom security policy)
+            from project.jar // this plugin's jar
+            from project.configurations.runtime - project.configurations.provided // the dep jars
+            // extra files for the plugin to go into the zip
             from('src/main/packaging') // TODO: move all config/bin/_size/etc into packaging
             from('src/main') {
                 include 'config/**'
                 include 'bin/**'
             }
-            from('src/site') {
-                include '_site/**'
+            if (project.path.startsWith(':modules:') == false) {
+                into('elasticsearch')
             }
         }
         project.assemble.dependsOn(bundle)
-        return bundle
+
+        // remove jar from the archives (things that will be published), and set it to the zip
+        project.configurations.archives.artifacts.removeAll { it.archiveTask.is project.jar }
+        project.artifacts.add('archives', bundle)
+
+        // also make the zip the default artifact (used when depending on this project)
+        project.configurations.getByName('default').extendsFrom = []
+        project.artifacts.add('default', bundle)
     }
 }

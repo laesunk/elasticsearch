@@ -81,7 +81,6 @@ setup() {
     # starting Elasticsearch so we don't have to wait for elasticsearch to scan for
     # them.
     install_elasticsearch_test_scripts
-    ESPLUGIN_COMMAND_USER=root install_and_check_plugin lang groovy
     start_elasticsearch_service
     run_elasticsearch_tests
 }
@@ -117,6 +116,7 @@ setup() {
 
     assert_file_not_exist "/etc/elasticsearch"
     assert_file_not_exist "/etc/elasticsearch/elasticsearch.yml"
+    assert_file_not_exist  "/etc/elasticsearch/jvm.options"
     assert_file_not_exist "/etc/elasticsearch/logging.yml"
 
     assert_file_not_exist "/etc/init.d/elasticsearch"

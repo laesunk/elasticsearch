@@ -57,6 +57,18 @@ setup() {
     install_package
 }
 
+@test "[INIT.D] elasticsearch fails if startup script is not executable" {
+    local INIT="/etc/init.d/elasticsearch"
+    local DAEMON="$ESHOME/bin/elasticsearch"
+    
+    sudo chmod -x "$DAEMON"
+    run "$INIT"
+    sudo chmod +x "$DAEMON"
+    
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"The elasticsearch startup script does not exists or it is not executable, tried: $DAEMON"* ]]
+}
+
 @test "[INIT.D] daemon isn't enabled on restart" {
     # Rather than restart the VM which would be slow we check for the symlinks
     # that init.d uses to restart the application on startup.
@@ -70,7 +82,6 @@ setup() {
     # Install scripts used to test script filters and search templates before
     # starting Elasticsearch so we don't have to wait for elasticsearch to scan for
     # them.
-    ESPLUGIN_COMMAND_USER=root install_and_check_plugin lang groovy
     install_elasticsearch_test_scripts
     service elasticsearch start
     wait_for_elasticsearch_status

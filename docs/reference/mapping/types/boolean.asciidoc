@@ -91,19 +91,20 @@ The following parameters are accepted by `boolean` fields:
 
 [horizontal]
 
-<<index-boost,`boost`>>::
+<<mapping-boost,`boost`>>::
 
-    Field-level index time boosting. Accepts a floating point number, defaults
+    Mapping field-level query time boosting. Accepts a floating point number, defaults
     to `1.0`.
 
 <<doc-values,`doc_values`>>::
 
-    Can the field value be used for sorting, aggregations, or scripting?
-    Accepts `true` (default) or `false`.
+    Should the field be stored on disk in a column-stride fashion, so that it
+    can later be used for sorting, aggregations, or scripting? Accepts `true`
+    (default) or `false`.
 
 <<mapping-index,`index`>>::
 
-    Should the field be searchable? Accepts `not_analyzed` (default) and `no`.
+    Should the field be searchable? Accepts `true` (default) and `false`.
 
 <<null-value,`null_value`>>::
 

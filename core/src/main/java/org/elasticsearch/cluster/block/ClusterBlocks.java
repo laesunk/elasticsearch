@@ -20,7 +20,6 @@
 package org.elasticsearch.cluster.block;
 
 import com.carrotsearch.hppc.cursors.ObjectObjectCursor;
-
 import org.elasticsearch.cluster.AbstractDiffable;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.metadata.MetaDataIndexStateService;
@@ -199,6 +198,28 @@ public class ClusterBlocks extends AbstractDiffable<ClusterBlocks> {
         return new ClusterBlockException(unmodifiableSet(blocks.collect(toSet())));
     }
 
+    public String prettyPrint() {
+        if (global.isEmpty() && indices().isEmpty()) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        sb.append("blocks: \n");
+        if (global.isEmpty() == false) {
+            sb.append("   _global_:\n");
+            for (ClusterBlock block : global) {
+                sb.append("      ").append(block);
+            }
+        }
+        for (ObjectObjectCursor<String, Set<ClusterBlock>> entry : indices()) {
+            sb.append("   ").append(entry.key).append(":\n");
+            for (ClusterBlock block : entry.value) {
+                sb.append("      ").append(block);
+            }
+        }
+        sb.append("\n");
+        return sb.toString();
+    }
+
     @Override
     public void writeTo(StreamOutput out) throws IOException {
         writeBlockSet(global, out);
@@ -283,29 +304,29 @@ public class ClusterBlocks extends AbstractDiffable<ClusterBlocks> {
 
         public Builder addBlocks(IndexMetaData indexMetaData) {
             if (indexMetaData.getState() == IndexMetaData.State.CLOSE) {
-                addIndexBlock(indexMetaData.getIndex(), MetaDataIndexStateService.INDEX_CLOSED_BLOCK);
+                addIndexBlock(indexMetaData.getIndex().getName(), MetaDataIndexStateService.INDEX_CLOSED_BLOCK);
             }
-            if (indexMetaData.getSettings().getAsBoolean(IndexMetaData.SETTING_READ_ONLY, false)) {
-                addIndexBlock(indexMetaData.getIndex(), IndexMetaData.INDEX_READ_ONLY_BLOCK);
+            if (IndexMetaData.INDEX_READ_ONLY_SETTING.get(indexMetaData.getSettings())) {
+                addIndexBlock(indexMetaData.getIndex().getName(), IndexMetaData.INDEX_READ_ONLY_BLOCK);
             }
-            if (indexMetaData.getSettings().getAsBoolean(IndexMetaData.SETTING_BLOCKS_READ, false)) {
-                addIndexBlock(indexMetaData.getIndex(), IndexMetaData.INDEX_READ_BLOCK);
+            if (IndexMetaData.INDEX_BLOCKS_READ_SETTING.get(indexMetaData.getSettings())) {
+                addIndexBlock(indexMetaData.getIndex().getName(), IndexMetaData.INDEX_READ_BLOCK);
             }
-            if (indexMetaData.getSettings().getAsBoolean(IndexMetaData.SETTING_BLOCKS_WRITE, false)) {
-                addIndexBlock(indexMetaData.getIndex(), IndexMetaData.INDEX_WRITE_BLOCK);
+            if (IndexMetaData.INDEX_BLOCKS_WRITE_SETTING.get(indexMetaData.getSettings())) {
+                addIndexBlock(indexMetaData.getIndex().getName(), IndexMetaData.INDEX_WRITE_BLOCK);
             }
-            if (indexMetaData.getSettings().getAsBoolean(IndexMetaData.SETTING_BLOCKS_METADATA, false)) {
-                addIndexBlock(indexMetaData.getIndex(), IndexMetaData.INDEX_METADATA_BLOCK);
+            if (IndexMetaData.INDEX_BLOCKS_METADATA_SETTING.get(indexMetaData.getSettings())) {
+                addIndexBlock(indexMetaData.getIndex().getName(), IndexMetaData.INDEX_METADATA_BLOCK);
             }
             return this;
         }
 
         public Builder updateBlocks(IndexMetaData indexMetaData) {
-            removeIndexBlock(indexMetaData.getIndex(), MetaDataIndexStateService.INDEX_CLOSED_BLOCK);
-            removeIndexBlock(indexMetaData.getIndex(), IndexMetaData.INDEX_READ_ONLY_BLOCK);
-            removeIndexBlock(indexMetaData.getIndex(), IndexMetaData.INDEX_READ_BLOCK);
-            removeIndexBlock(indexMetaData.getIndex(), IndexMetaData.INDEX_WRITE_BLOCK);
-            removeIndexBlock(indexMetaData.getIndex(), IndexMetaData.INDEX_METADATA_BLOCK);
+            removeIndexBlock(indexMetaData.getIndex().getName(), MetaDataIndexStateService.INDEX_CLOSED_BLOCK);
+            removeIndexBlock(indexMetaData.getIndex().getName(), IndexMetaData.INDEX_READ_ONLY_BLOCK);
+            removeIndexBlock(indexMetaData.getIndex().getName(), IndexMetaData.INDEX_READ_BLOCK);
+            removeIndexBlock(indexMetaData.getIndex().getName(), IndexMetaData.INDEX_WRITE_BLOCK);
+            removeIndexBlock(indexMetaData.getIndex().getName(), IndexMetaData.INDEX_METADATA_BLOCK);
             return addBlocks(indexMetaData);
         }
 
@@ -318,6 +339,12 @@ public class ClusterBlocks extends AbstractDiffable<ClusterBlocks> {
             global.remove(block);
             return this;
         }
+
+        public Builder removeGlobalBlock(int blockId) {
+            global.removeIf(block -> block.id() == blockId);
+            return this;
+        }
+
 
         public Builder addIndexBlock(String index, ClusterBlock block) {
             if (!indices.containsKey(index)) {

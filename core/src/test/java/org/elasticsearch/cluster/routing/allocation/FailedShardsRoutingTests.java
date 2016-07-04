@@ -32,6 +32,7 @@ import org.elasticsearch.cluster.routing.allocation.command.MoveAllocationComman
 import org.elasticsearch.cluster.routing.allocation.decider.ClusterRebalanceAllocationDecider;
 import org.elasticsearch.common.logging.ESLogger;
 import org.elasticsearch.common.logging.Loggers;
+import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.test.ESAllocationTestCase;
 
 import java.util.ArrayList;
@@ -41,7 +42,6 @@ import static org.elasticsearch.cluster.routing.ShardRoutingState.INITIALIZING;
 import static org.elasticsearch.cluster.routing.ShardRoutingState.RELOCATING;
 import static org.elasticsearch.cluster.routing.ShardRoutingState.STARTED;
 import static org.elasticsearch.cluster.routing.ShardRoutingState.UNASSIGNED;
-import static org.elasticsearch.common.settings.Settings.settingsBuilder;
 import static org.hamcrest.Matchers.anyOf;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.lessThan;
@@ -55,9 +55,9 @@ public class FailedShardsRoutingTests extends ESAllocationTestCase {
     private final ESLogger logger = Loggers.getLogger(FailedShardsRoutingTests.class);
 
     public void testFailedShardPrimaryRelocatingToAndFrom() {
-        AllocationService allocation = createAllocationService(settingsBuilder()
-                .put("cluster.routing.allocation.concurrent_recoveries", 10)
-                .put(ClusterRebalanceAllocationDecider.CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE, "always")
+        AllocationService allocation = createAllocationService(Settings.builder()
+                .put("cluster.routing.allocation.node_concurrent_recoveries", 10)
+                .put(ClusterRebalanceAllocationDecider.CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE_SETTING.getKey(), "always")
                 .build());
 
         logger.info("--> building initial routing table");
@@ -75,7 +75,7 @@ public class FailedShardsRoutingTests extends ESAllocationTestCase {
                         .put(newNode("node2"))
         ).build();
 
-        RoutingAllocation.Result rerouteResult = allocation.reroute(clusterState);
+        RoutingAllocation.Result rerouteResult = allocation.reroute(clusterState, "reroute");
         clusterState = ClusterState.builder(clusterState).routingTable(rerouteResult.routingTable()).build();
 
         // starting primaries
@@ -95,7 +95,7 @@ public class FailedShardsRoutingTests extends ESAllocationTestCase {
         clusterState = ClusterState.builder(clusterState).nodes(DiscoveryNodes.builder(clusterState.nodes())
                         .put(newNode("node3"))
         ).build();
-        rerouteResult = allocation.reroute(clusterState);
+        rerouteResult = allocation.reroute(clusterState, "reroute");
         clusterState = ClusterState.builder(clusterState).routingTable(rerouteResult.routingTable()).build();
 
         assertThat(clusterState.getRoutingNodes().node("node1").size(), equalTo(1));
@@ -109,7 +109,7 @@ public class FailedShardsRoutingTests extends ESAllocationTestCase {
 
         logger.info("--> moving primary shard to node3");
         rerouteResult = allocation.reroute(clusterState, new AllocationCommands(
-                        new MoveAllocationCommand(clusterState.routingTable().index("test").shard(0).primaryShard().shardId(), clusterState.routingTable().index("test").shard(0).primaryShard().currentNodeId(), "node3"))
+                        new MoveAllocationCommand("test", 0, clusterState.routingTable().index("test").shard(0).primaryShard().currentNodeId(), "node3"))
         );
         assertThat(rerouteResult.changed(), equalTo(true));
         clusterState = ClusterState.builder(clusterState).routingTable(rerouteResult.routingTable()).build();
@@ -125,7 +125,7 @@ public class FailedShardsRoutingTests extends ESAllocationTestCase {
 
         logger.info("--> moving primary shard to node3");
         rerouteResult = allocation.reroute(clusterState, new AllocationCommands(
-                        new MoveAllocationCommand(clusterState.routingTable().index("test").shard(0).primaryShard().shardId(), clusterState.routingTable().index("test").shard(0).primaryShard().currentNodeId(), "node3"))
+                        new MoveAllocationCommand("test", 0, clusterState.routingTable().index("test").shard(0).primaryShard().currentNodeId(), "node3"))
         );
         assertThat(rerouteResult.changed(), equalTo(true));
         clusterState = ClusterState.builder(clusterState).routingTable(rerouteResult.routingTable()).build();
@@ -143,9 +143,9 @@ public class FailedShardsRoutingTests extends ESAllocationTestCase {
     }
 
     public void testFailPrimaryStartedCheckReplicaElected() {
-        AllocationService strategy = createAllocationService(settingsBuilder()
-                .put("cluster.routing.allocation.concurrent_recoveries", 10)
-                .put(ClusterRebalanceAllocationDecider.CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE, "always")
+        AllocationService strategy = createAllocationService(Settings.builder()
+                .put("cluster.routing.allocation.node_concurrent_recoveries", 10)
+                .put(ClusterRebalanceAllocationDecider.CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE_SETTING.getKey(), "always")
                 .build());
 
         logger.info("Building initial routing table");
@@ -163,7 +163,7 @@ public class FailedShardsRoutingTests extends ESAllocationTestCase {
         logger.info("Adding two nodes and performing rerouting");
         clusterState = ClusterState.builder(clusterState).nodes(DiscoveryNodes.builder().put(newNode("node1")).put(newNode("node2"))).build();
         RoutingTable prevRoutingTable = routingTable;
-        routingTable = strategy.reroute(clusterState).routingTable();
+        routingTable = strategy.reroute(clusterState, "reroute").routingTable();
         clusterState = ClusterState.builder(clusterState).routingTable(routingTable).build();
 
         logger.info("Start the shards (primaries)");
@@ -224,9 +224,9 @@ public class FailedShardsRoutingTests extends ESAllocationTestCase {
     }
 
     public void testFirstAllocationFailureSingleNode() {
-        AllocationService strategy = createAllocationService(settingsBuilder()
-                .put("cluster.routing.allocation.concurrent_recoveries", 10)
-                .put(ClusterRebalanceAllocationDecider.CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE, "always")
+        AllocationService strategy = createAllocationService(Settings.builder()
+                .put("cluster.routing.allocation.node_concurrent_recoveries", 10)
+                .put(ClusterRebalanceAllocationDecider.CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE_SETTING.getKey(), "always")
                 .build());
 
         logger.info("Building initial routing table");
@@ -244,7 +244,7 @@ public class FailedShardsRoutingTests extends ESAllocationTestCase {
         logger.info("Adding single node and performing rerouting");
         clusterState = ClusterState.builder(clusterState).nodes(DiscoveryNodes.builder().put(newNode("node1"))).build();
         RoutingTable prevRoutingTable = routingTable;
-        routingTable = strategy.reroute(clusterState).routingTable();
+        routingTable = strategy.reroute(clusterState, "reroute").routingTable();
         clusterState = ClusterState.builder(clusterState).routingTable(routingTable).build();
 
         assertThat(prevRoutingTable != routingTable, equalTo(true));
@@ -280,9 +280,9 @@ public class FailedShardsRoutingTests extends ESAllocationTestCase {
     }
 
     public void testSingleShardMultipleAllocationFailures() {
-        AllocationService strategy = createAllocationService(settingsBuilder()
-                .put("cluster.routing.allocation.concurrent_recoveries", 10)
-                .put(ClusterRebalanceAllocationDecider.CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE, "always")
+        AllocationService strategy = createAllocationService(Settings.builder()
+                .put("cluster.routing.allocation.node_concurrent_recoveries", 10)
+                .put(ClusterRebalanceAllocationDecider.CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE_SETTING.getKey(), "always")
                 .build());
 
         logger.info("Building initial routing table");
@@ -311,7 +311,7 @@ public class FailedShardsRoutingTests extends ESAllocationTestCase {
                     )
                     .build();
             // and assign more unassigned
-            clusterState = ClusterState.builder(clusterState).routingTable(strategy.reroute(clusterState).routingTable()).build();
+            clusterState = ClusterState.builder(clusterState).routingTable(strategy.reroute(clusterState, "reroute").routingTable()).build();
         }
 
         int shardsToFail = randomIntBetween(1, numberOfReplicas);
@@ -336,9 +336,9 @@ public class FailedShardsRoutingTests extends ESAllocationTestCase {
     }
 
     public void testFirstAllocationFailureTwoNodes() {
-        AllocationService strategy = createAllocationService(settingsBuilder()
-                .put("cluster.routing.allocation.concurrent_recoveries", 10)
-                .put(ClusterRebalanceAllocationDecider.CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE, "always")
+        AllocationService strategy = createAllocationService(Settings.builder()
+                .put("cluster.routing.allocation.node_concurrent_recoveries", 10)
+                .put(ClusterRebalanceAllocationDecider.CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE_SETTING.getKey(), "always")
                 .build());
 
         logger.info("Building initial routing table");
@@ -356,7 +356,7 @@ public class FailedShardsRoutingTests extends ESAllocationTestCase {
         logger.info("Adding two nodes and performing rerouting");
         clusterState = ClusterState.builder(clusterState).nodes(DiscoveryNodes.builder().put(newNode("node1")).put(newNode("node2"))).build();
         RoutingTable prevRoutingTable = routingTable;
-        routingTable = strategy.reroute(clusterState).routingTable();
+        routingTable = strategy.reroute(clusterState, "reroute").routingTable();
         clusterState = ClusterState.builder(clusterState).routingTable(routingTable).build();
         final String nodeHoldingPrimary = routingTable.index("test").shard(0).primaryShard().currentNodeId();
 
@@ -396,9 +396,9 @@ public class FailedShardsRoutingTests extends ESAllocationTestCase {
     }
 
     public void testRebalanceFailure() {
-        AllocationService strategy = createAllocationService(settingsBuilder()
-                .put("cluster.routing.allocation.concurrent_recoveries", 10)
-                .put(ClusterRebalanceAllocationDecider.CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE, "always")
+        AllocationService strategy = createAllocationService(Settings.builder()
+                .put("cluster.routing.allocation.node_concurrent_recoveries", 10)
+                .put(ClusterRebalanceAllocationDecider.CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE_SETTING.getKey(), "always")
                 .build());
 
         logger.info("Building initial routing table");
@@ -416,7 +416,7 @@ public class FailedShardsRoutingTests extends ESAllocationTestCase {
         logger.info("Adding two nodes and performing rerouting");
         clusterState = ClusterState.builder(clusterState).nodes(DiscoveryNodes.builder().put(newNode("node1")).put(newNode("node2"))).build();
         RoutingTable prevRoutingTable = routingTable;
-        routingTable = strategy.reroute(clusterState).routingTable();
+        routingTable = strategy.reroute(clusterState, "reroute").routingTable();
         clusterState = ClusterState.builder(clusterState).routingTable(routingTable).build();
 
         logger.info("Start the shards (primaries)");
@@ -458,7 +458,7 @@ public class FailedShardsRoutingTests extends ESAllocationTestCase {
         logger.info("Adding third node and reroute");
         clusterState = ClusterState.builder(clusterState).nodes(DiscoveryNodes.builder(clusterState.nodes()).put(newNode("node3"))).build();
         prevRoutingTable = routingTable;
-        routingTable = strategy.reroute(clusterState).routingTable();
+        routingTable = strategy.reroute(clusterState, "reroute").routingTable();
         clusterState = ClusterState.builder(clusterState).routingTable(routingTable).build();
         routingNodes = clusterState.getRoutingNodes();
 
@@ -491,7 +491,7 @@ public class FailedShardsRoutingTests extends ESAllocationTestCase {
     }
 
     public void testFailAllReplicasInitializingOnPrimaryFail() {
-        AllocationService allocation = createAllocationService(settingsBuilder()
+        AllocationService allocation = createAllocationService(Settings.builder()
                 .build());
 
         MetaData metaData = MetaData.builder()
@@ -506,7 +506,7 @@ public class FailedShardsRoutingTests extends ESAllocationTestCase {
 
         // add 4 nodes
         clusterState = ClusterState.builder(clusterState).nodes(DiscoveryNodes.builder().put(newNode("node1")).put(newNode("node2")).put(newNode("node3")).put(newNode("node4"))).build();
-        clusterState = ClusterState.builder(clusterState).routingTable(allocation.reroute(clusterState).routingTable()).build();
+        clusterState = ClusterState.builder(clusterState).routingTable(allocation.reroute(clusterState, "reroute").routingTable()).build();
         assertThat(clusterState.getRoutingNodes().shardsWithState(INITIALIZING).size(), equalTo(1));
         assertThat(clusterState.getRoutingNodes().shardsWithState(UNASSIGNED).size(), equalTo(2));
         // start primary shards
@@ -537,7 +537,7 @@ public class FailedShardsRoutingTests extends ESAllocationTestCase {
     }
 
     public void testFailAllReplicasInitializingOnPrimaryFailWhileHavingAReplicaToElect() {
-        AllocationService allocation = createAllocationService(settingsBuilder()
+        AllocationService allocation = createAllocationService(Settings.builder()
                 .build());
 
         MetaData metaData = MetaData.builder()
@@ -552,7 +552,7 @@ public class FailedShardsRoutingTests extends ESAllocationTestCase {
 
         // add 4 nodes
         clusterState = ClusterState.builder(clusterState).nodes(DiscoveryNodes.builder().put(newNode("node1")).put(newNode("node2")).put(newNode("node3")).put(newNode("node4"))).build();
-        clusterState = ClusterState.builder(clusterState).routingTable(allocation.reroute(clusterState).routingTable()).build();
+        clusterState = ClusterState.builder(clusterState).routingTable(allocation.reroute(clusterState, "reroute").routingTable()).build();
         assertThat(clusterState.getRoutingNodes().shardsWithState(INITIALIZING).size(), equalTo(1));
         assertThat(clusterState.getRoutingNodes().shardsWithState(UNASSIGNED).size(), equalTo(2));
         // start primary shards

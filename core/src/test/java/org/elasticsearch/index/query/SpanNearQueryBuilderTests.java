@@ -22,6 +22,8 @@ package org.elasticsearch.index.query;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.spans.SpanNearQuery;
 import org.apache.lucene.search.spans.SpanQuery;
+import org.elasticsearch.Version;
+import org.elasticsearch.common.ParseFieldMatcher;
 
 import java.io.IOException;
 import java.util.Iterator;
@@ -38,7 +40,6 @@ public class SpanNearQueryBuilderTests extends AbstractQueryTestCase<SpanNearQue
             queryBuilder.clause(spanTermQueries[i]);
         }
         queryBuilder.inOrder(randomBoolean());
-        queryBuilder.collectPayloads(randomBoolean());
         return queryBuilder;
     }
 
@@ -49,7 +50,7 @@ public class SpanNearQueryBuilderTests extends AbstractQueryTestCase<SpanNearQue
         assertThat(spanNearQuery.getSlop(), equalTo(queryBuilder.slop()));
         assertThat(spanNearQuery.isInOrder(), equalTo(queryBuilder.inOrder()));
         assertThat(spanNearQuery.getClauses().length, equalTo(queryBuilder.clauses().size()));
-        Iterator<SpanQueryBuilder> spanQueryBuilderIterator = queryBuilder.clauses().iterator();
+        Iterator<SpanQueryBuilder<?>> spanQueryBuilderIterator = queryBuilder.clauses().iterator();
         for (SpanQuery spanQuery : spanNearQuery.getClauses()) {
             assertThat(spanQuery, equalTo(spanQueryBuilderIterator.next().toQuery(context)));
         }
@@ -64,11 +65,88 @@ public class SpanNearQueryBuilderTests extends AbstractQueryTestCase<SpanNearQue
         }
 
         try {
-            SpanNearQueryBuilder spanNearQueryBuilder = new SpanNearQueryBuilder(SpanTermQueryBuilder.PROTOTYPE, 1);
+            SpanNearQueryBuilder spanNearQueryBuilder = new SpanNearQueryBuilder(new SpanTermQueryBuilder("field", "value"), 1);
             spanNearQueryBuilder.clause(null);
             fail("cannot be null");
         } catch (IllegalArgumentException e) {
             // ecpected
         }
+    }
+
+    public void testFromJson() throws IOException {
+        String json =
+                "{\n" +
+                "  \"span_near\" : {\n" +
+                "    \"clauses\" : [ {\n" +
+                "      \"span_term\" : {\n" +
+                "        \"field\" : {\n" +
+                "          \"value\" : \"value1\",\n" +
+                "          \"boost\" : 1.0\n" +
+                "        }\n" +
+                "      }\n" +
+                "    }, {\n" +
+                "      \"span_term\" : {\n" +
+                "        \"field\" : {\n" +
+                "          \"value\" : \"value2\",\n" +
+                "          \"boost\" : 1.0\n" +
+                "        }\n" +
+                "      }\n" +
+                "    }, {\n" +
+                "      \"span_term\" : {\n" +
+                "        \"field\" : {\n" +
+                "          \"value\" : \"value3\",\n" +
+                "          \"boost\" : 1.0\n" +
+                "        }\n" +
+                "      }\n" +
+                "    } ],\n" +
+                "    \"slop\" : 12,\n" +
+                "    \"in_order\" : false,\n" +
+                "    \"boost\" : 1.0\n" +
+                "  }\n" +
+                "}";
+
+        SpanNearQueryBuilder parsed = (SpanNearQueryBuilder) parseQuery(json);
+        checkGeneratedJson(json, parsed);
+
+        assertEquals(json, 3, parsed.clauses().size());
+        assertEquals(json, 12, parsed.slop());
+        assertEquals(json, false, parsed.inOrder());
+    }
+
+    public void testCollectPayloadsDeprecated() throws Exception {
+        assertEquals("We can remove support for ignoring collect_payloads in 6.0.0", 5, Version.CURRENT.major);
+        String json =
+                "{\n" +
+                "  \"span_near\" : {\n" +
+                "    \"clauses\" : [ {\n" +
+                "      \"span_term\" : {\n" +
+                "        \"field\" : {\n" +
+                "          \"value\" : \"value1\",\n" +
+                "          \"boost\" : 1.0\n" +
+                "        }\n" +
+                "      }\n" +
+                "    }, {\n" +
+                "      \"span_term\" : {\n" +
+                "        \"field\" : {\n" +
+                "          \"value\" : \"value2\",\n" +
+                "          \"boost\" : 1.0\n" +
+                "        }\n" +
+                "      }\n" +
+                "    }, {\n" +
+                "      \"span_term\" : {\n" +
+                "        \"field\" : {\n" +
+                "          \"value\" : \"value3\",\n" +
+                "          \"boost\" : 1.0\n" +
+                "        }\n" +
+                "      }\n" +
+                "    } ],\n" +
+                "    \"slop\" : 12,\n" +
+                "    \"in_order\" : false,\n" +
+                "    \"collect_payloads\" : false,\n" +
+                "    \"boost\" : 1.0\n" +
+                "  }\n" +
+                "}";
+
+        parseQuery(json, ParseFieldMatcher.EMPTY); // Just don't throw an error and we're fine
     }
 }

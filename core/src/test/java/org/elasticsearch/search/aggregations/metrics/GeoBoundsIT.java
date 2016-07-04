@@ -37,6 +37,7 @@ import static org.elasticsearch.search.aggregations.AggregationBuilders.global;
 import static org.elasticsearch.search.aggregations.AggregationBuilders.terms;
 import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertSearchResponse;
 import static org.hamcrest.Matchers.allOf;
+import static org.hamcrest.Matchers.closeTo;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.lessThanOrEqualTo;
@@ -63,10 +64,10 @@ public class GeoBoundsIT extends AbstractGeoTestCase {
         assertThat(geoBounds.getName(), equalTo(aggName));
         GeoPoint topLeft = geoBounds.topLeft();
         GeoPoint bottomRight = geoBounds.bottomRight();
-        assertThat(topLeft.lat(), equalTo(singleTopLeft.lat()));
-        assertThat(topLeft.lon(), equalTo(singleTopLeft.lon()));
-        assertThat(bottomRight.lat(), equalTo(singleBottomRight.lat()));
-        assertThat(bottomRight.lon(), equalTo(singleBottomRight.lon()));
+        assertThat(topLeft.lat(), closeTo(singleTopLeft.lat(), GEOHASH_TOLERANCE));
+        assertThat(topLeft.lon(), closeTo(singleTopLeft.lon(), GEOHASH_TOLERANCE));
+        assertThat(bottomRight.lat(), closeTo(singleBottomRight.lat(), GEOHASH_TOLERANCE));
+        assertThat(bottomRight.lon(), closeTo(singleBottomRight.lon(), GEOHASH_TOLERANCE));
     }
 
     public void testSingleValuedField_getProperty() throws Exception {
@@ -92,19 +93,19 @@ public class GeoBoundsIT extends AbstractGeoTestCase {
         assertThat((GeoBounds) global.getProperty(aggName), sameInstance(geobounds));
         GeoPoint topLeft = geobounds.topLeft();
         GeoPoint bottomRight = geobounds.bottomRight();
-        assertThat(topLeft.lat(), equalTo(singleTopLeft.lat()));
-        assertThat(topLeft.lon(), equalTo(singleTopLeft.lon()));
-        assertThat(bottomRight.lat(), equalTo(singleBottomRight.lat()));
-        assertThat(bottomRight.lon(), equalTo(singleBottomRight.lon()));
-        assertThat((double) global.getProperty(aggName + ".top"), equalTo(singleTopLeft.lat()));
-        assertThat((double) global.getProperty(aggName + ".left"), equalTo(singleTopLeft.lon()));
-        assertThat((double) global.getProperty(aggName + ".bottom"), equalTo(singleBottomRight.lat()));
-        assertThat((double) global.getProperty(aggName + ".right"), equalTo(singleBottomRight.lon()));
+        assertThat(topLeft.lat(), closeTo(singleTopLeft.lat(), GEOHASH_TOLERANCE));
+        assertThat(topLeft.lon(), closeTo(singleTopLeft.lon(), GEOHASH_TOLERANCE));
+        assertThat(bottomRight.lat(), closeTo(singleBottomRight.lat(), GEOHASH_TOLERANCE));
+        assertThat(bottomRight.lon(), closeTo(singleBottomRight.lon(), GEOHASH_TOLERANCE));
+        assertThat((double) global.getProperty(aggName + ".top"), closeTo(singleTopLeft.lat(), GEOHASH_TOLERANCE));
+        assertThat((double) global.getProperty(aggName + ".left"), closeTo(singleTopLeft.lon(), GEOHASH_TOLERANCE));
+        assertThat((double) global.getProperty(aggName + ".bottom"), closeTo(singleBottomRight.lat(), GEOHASH_TOLERANCE));
+        assertThat((double) global.getProperty(aggName + ".right"), closeTo(singleBottomRight.lon(), GEOHASH_TOLERANCE));
     }
 
     public void testMultiValuedField() throws Exception {
         SearchResponse response = client().prepareSearch(IDX_NAME)
-            .addAggregation(geoBounds(aggName).field(MULTI_VALUED_FIELD_NAME)
+                .addAggregation(geoBounds(aggName).field(MULTI_VALUED_FIELD_NAME)
                         .wrapLongitude(false))
                 .execute().actionGet();
 
@@ -116,10 +117,10 @@ public class GeoBoundsIT extends AbstractGeoTestCase {
         assertThat(geoBounds.getName(), equalTo(aggName));
         GeoPoint topLeft = geoBounds.topLeft();
         GeoPoint bottomRight = geoBounds.bottomRight();
-        assertThat(topLeft.lat(), equalTo(multiTopLeft.lat()));
-        assertThat(topLeft.lon(), equalTo(multiTopLeft.lon()));
-        assertThat(bottomRight.lat(), equalTo(multiBottomRight.lat()));
-        assertThat(bottomRight.lon(), equalTo(multiBottomRight.lon()));
+        assertThat(topLeft.lat(), closeTo(multiTopLeft.lat(), GEOHASH_TOLERANCE));
+        assertThat(topLeft.lon(), closeTo(multiTopLeft.lon(), GEOHASH_TOLERANCE));
+        assertThat(bottomRight.lat(), closeTo(multiBottomRight.lat(), GEOHASH_TOLERANCE));
+        assertThat(bottomRight.lon(), closeTo(multiBottomRight.lon(), GEOHASH_TOLERANCE));
     }
 
     public void testUnmapped() throws Exception {
@@ -152,10 +153,10 @@ public class GeoBoundsIT extends AbstractGeoTestCase {
         assertThat(geoBounds.getName(), equalTo(aggName));
         GeoPoint topLeft = geoBounds.topLeft();
         GeoPoint bottomRight = geoBounds.bottomRight();
-        assertThat(topLeft.lat(), equalTo(singleTopLeft.lat()));
-        assertThat(topLeft.lon(), equalTo(singleTopLeft.lon()));
-        assertThat(bottomRight.lat(), equalTo(singleBottomRight.lat()));
-        assertThat(bottomRight.lon(), equalTo(singleBottomRight.lon()));
+        assertThat(topLeft.lat(), closeTo(singleTopLeft.lat(), GEOHASH_TOLERANCE));
+        assertThat(topLeft.lon(), closeTo(singleTopLeft.lon(), GEOHASH_TOLERANCE));
+        assertThat(bottomRight.lat(), closeTo(singleBottomRight.lat(), GEOHASH_TOLERANCE));
+        assertThat(bottomRight.lon(), closeTo(singleBottomRight.lon(), GEOHASH_TOLERANCE));
     }
 
     public void testEmptyAggregation() throws Exception {
@@ -165,7 +166,7 @@ public class GeoBoundsIT extends AbstractGeoTestCase {
                         .wrapLongitude(false))
                 .execute().actionGet();
 
-        assertThat(searchResponse.getHits().getTotalHits(), equalTo(0l));
+        assertThat(searchResponse.getHits().getTotalHits(), equalTo(0L));
         GeoBounds geoBounds = searchResponse.getAggregations().get(aggName);
         assertThat(geoBounds, notNullValue());
         assertThat(geoBounds.getName(), equalTo(aggName));
@@ -191,10 +192,10 @@ public class GeoBoundsIT extends AbstractGeoTestCase {
         assertThat(geoBounds.getName(), equalTo(aggName));
         GeoPoint topLeft = geoBounds.topLeft();
         GeoPoint bottomRight = geoBounds.bottomRight();
-        assertThat(topLeft.lat(), equalTo(geoValuesTopLeft.lat()));
-        assertThat(topLeft.lon(), equalTo(geoValuesTopLeft.lon()));
-        assertThat(bottomRight.lat(), equalTo(geoValuesBottomRight.lat()));
-        assertThat(bottomRight.lon(), equalTo(geoValuesBottomRight.lon()));
+        assertThat(topLeft.lat(), closeTo(geoValuesTopLeft.lat(), GEOHASH_TOLERANCE));
+        assertThat(topLeft.lon(), closeTo(geoValuesTopLeft.lon(), GEOHASH_TOLERANCE));
+        assertThat(bottomRight.lat(), closeTo(geoValuesBottomRight.lat(), GEOHASH_TOLERANCE));
+        assertThat(bottomRight.lon(), closeTo(geoValuesBottomRight.lon(), GEOHASH_TOLERANCE));
     }
 
     public void testSingleValuedFieldNearDateLineWrapLongitude() throws Exception {
@@ -212,10 +213,10 @@ public class GeoBoundsIT extends AbstractGeoTestCase {
         assertThat(geoBounds.getName(), equalTo(aggName));
         GeoPoint topLeft = geoBounds.topLeft();
         GeoPoint bottomRight = geoBounds.bottomRight();
-        assertThat(topLeft.lat(), equalTo(geoValuesTopLeft.lat()));
-        assertThat(topLeft.lon(), equalTo(geoValuesTopLeft.lon()));
-        assertThat(bottomRight.lat(), equalTo(geoValuesBottomRight.lat()));
-        assertThat(bottomRight.lon(), equalTo(geoValuesBottomRight.lon()));
+        assertThat(topLeft.lat(), closeTo(geoValuesTopLeft.lat(), GEOHASH_TOLERANCE));
+        assertThat(topLeft.lon(), closeTo(geoValuesTopLeft.lon(), GEOHASH_TOLERANCE));
+        assertThat(bottomRight.lat(), closeTo(geoValuesBottomRight.lat(), GEOHASH_TOLERANCE));
+        assertThat(bottomRight.lon(), closeTo(geoValuesBottomRight.lon(), GEOHASH_TOLERANCE));
     }
 
     /**
@@ -237,7 +238,7 @@ public class GeoBoundsIT extends AbstractGeoTestCase {
         for (int i = 0; i < 10; i++) {
             Bucket bucket = buckets.get(i);
             assertThat(bucket, notNullValue());
-            assertThat("Bucket " + bucket.getKey() + " has wrong number of documents", bucket.getDocCount(), equalTo(1l));
+            assertThat("InternalBucket " + bucket.getKey() + " has wrong number of documents", bucket.getDocCount(), equalTo(1L));
             GeoBounds geoBounds = bucket.getAggregations().get(aggName);
             assertThat(geoBounds, notNullValue());
             assertThat(geoBounds.getName(), equalTo(aggName));
@@ -259,9 +260,9 @@ public class GeoBoundsIT extends AbstractGeoTestCase {
         assertThat(geoBounds.getName(), equalTo(aggName));
         GeoPoint topLeft = geoBounds.topLeft();
         GeoPoint bottomRight = geoBounds.bottomRight();
-        assertThat(topLeft.lat(), equalTo(1.0));
-        assertThat(topLeft.lon(), equalTo(0.0));
-        assertThat(bottomRight.lat(), equalTo(1.0));
-        assertThat(bottomRight.lon(), equalTo(0.0));
+        assertThat(topLeft.lat(), closeTo(1.0, GEOHASH_TOLERANCE));
+        assertThat(topLeft.lon(), closeTo(0.0, GEOHASH_TOLERANCE));
+        assertThat(bottomRight.lat(), closeTo(1.0, GEOHASH_TOLERANCE));
+        assertThat(bottomRight.lon(), closeTo(0.0, GEOHASH_TOLERANCE));
     }
 }

@@ -74,12 +74,23 @@ public class PrefixQueryBuilderTests extends AbstractQueryTestCase<PrefixQueryBu
     }
 
     public void testBlendedRewriteMethod() throws IOException {
-        for (String rewrite : Arrays.asList("top_terms_blended_freqs_10", "topTermsBlendedFreqs10")) {
-            Query parsedQuery = parseQuery(prefixQuery("field", "val").rewrite(rewrite).buildAsBytes()).toQuery(createShardContext());
-            assertThat(parsedQuery, instanceOf(PrefixQuery.class));
-            PrefixQuery prefixQuery = (PrefixQuery) parsedQuery;
-            assertThat(prefixQuery.getPrefix(), equalTo(new Term("field", "val")));
-            assertThat(prefixQuery.getRewriteMethod(), instanceOf(MultiTermQuery.TopTermsBlendedFreqScoringRewrite.class));
-        }
+        String rewrite = "top_terms_blended_freqs_10";
+        Query parsedQuery = parseQuery(prefixQuery("field", "val").rewrite(rewrite).buildAsBytes()).toQuery(createShardContext());
+        assertThat(parsedQuery, instanceOf(PrefixQuery.class));
+        PrefixQuery prefixQuery = (PrefixQuery) parsedQuery;
+        assertThat(prefixQuery.getPrefix(), equalTo(new Term("field", "val")));
+        assertThat(prefixQuery.getRewriteMethod(), instanceOf(MultiTermQuery.TopTermsBlendedFreqScoringRewrite.class));
+    }
+
+    public void testFromJson() throws IOException {
+        String json =
+                "{    \"prefix\" : { \"user\" :  { \"value\" : \"ki\", \"boost\" : 2.0 } }}";
+
+        PrefixQueryBuilder parsed = (PrefixQueryBuilder) parseQuery(json);
+        checkGeneratedJson(json, parsed);
+
+        assertEquals(json, "ki", parsed.value());
+        assertEquals(json, 2.0, parsed.boost(), 0.00001);
+        assertEquals(json, "user", parsed.fieldName());
     }
 }

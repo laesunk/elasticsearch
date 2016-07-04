@@ -23,15 +23,23 @@ import org.apache.lucene.queries.ExtendedCommonTermsQuery;
 import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.FuzzyQuery;
+import org.apache.lucene.search.LegacyNumericRangeQuery;
 import org.apache.lucene.search.MatchAllDocsQuery;
 import org.apache.lucene.search.PhraseQuery;
+import org.apache.lucene.search.PointRangeQuery;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.TermQuery;
+import org.elasticsearch.common.ParseFieldMatcher;
+import org.elasticsearch.common.lucene.search.MatchNoDocsQuery;
 import org.elasticsearch.common.lucene.search.MultiPhrasePrefixQuery;
 import org.elasticsearch.common.lucene.search.Queries;
+import org.elasticsearch.common.unit.Fuzziness;
 import org.elasticsearch.index.mapper.MappedFieldType;
 import org.elasticsearch.index.search.MatchQuery;
+import org.elasticsearch.index.search.MatchQuery.Type;
 import org.elasticsearch.index.search.MatchQuery.ZeroTermsQuery;
+import org.hamcrest.Matcher;
+import org.joda.time.format.ISODateTimeFormat;
 
 import java.io.IOException;
 import java.util.Locale;
@@ -50,12 +58,12 @@ public class MatchQueryBuilderTests extends AbstractQueryTestCase<MatchQueryBuil
         if (fieldName.equals(DATE_FIELD_NAME)) {
             assumeTrue("test runs only when at least a type is registered", getCurrentTypes().length > 0);
         }
-        Object value = "";
+        Object value;
         if (fieldName.equals(STRING_FIELD_NAME)) {
             int terms = randomIntBetween(0, 3);
             StringBuilder builder = new StringBuilder();
             for (int i = 0; i < terms; i++) {
-                builder.append(randomAsciiOfLengthBetween(1, 10) + " ");
+                builder.append(randomAsciiOfLengthBetween(1, 10)).append(" ");
             }
             value = builder.toString().trim();
         } else {
@@ -63,23 +71,22 @@ public class MatchQueryBuilderTests extends AbstractQueryTestCase<MatchQueryBuil
         }
 
         MatchQueryBuilder matchQuery = new MatchQueryBuilder(fieldName, value);
-        matchQuery.type(randomFrom(MatchQuery.Type.values()));
         matchQuery.operator(randomFrom(Operator.values()));
 
         if (randomBoolean()) {
             matchQuery.analyzer(randomFrom("simple", "keyword", "whitespace"));
         }
 
-        if (randomBoolean()) {
-            matchQuery.slop(randomIntBetween(0, 10));
-        }
-
-        if (randomBoolean()) {
+        if (fieldName.equals(BOOLEAN_FIELD_NAME) == false && randomBoolean()) {
             matchQuery.fuzziness(randomFuzziness(fieldName));
         }
 
         if (randomBoolean()) {
             matchQuery.prefixLength(randomIntBetween(0, 10));
+        }
+
+        if (randomBoolean()) {
+            matchQuery.maxExpansions(randomIntBetween(0, 1000));
         }
 
         if (randomBoolean()) {
@@ -120,15 +127,18 @@ public class MatchQueryBuilderTests extends AbstractQueryTestCase<MatchQueryBuil
         switch (queryBuilder.type()) {
         case BOOLEAN:
             assertThat(query, either(instanceOf(BooleanQuery.class)).or(instanceOf(ExtendedCommonTermsQuery.class))
-                    .or(instanceOf(TermQuery.class)).or(instanceOf(FuzzyQuery.class)));
+                    .or(instanceOf(TermQuery.class)).or(instanceOf(FuzzyQuery.class)).or(instanceOf(MatchNoDocsQuery.class))
+                    .or(instanceOf(LegacyNumericRangeQuery.class)).or(instanceOf(PointRangeQuery.class)));
             break;
         case PHRASE:
             assertThat(query, either(instanceOf(BooleanQuery.class)).or(instanceOf(PhraseQuery.class))
-                    .or(instanceOf(TermQuery.class)).or(instanceOf(FuzzyQuery.class)));
+                    .or(instanceOf(TermQuery.class)).or(instanceOf(FuzzyQuery.class))
+                    .or(instanceOf(LegacyNumericRangeQuery.class)).or(instanceOf(PointRangeQuery.class)));
             break;
         case PHRASE_PREFIX:
             assertThat(query, either(instanceOf(BooleanQuery.class)).or(instanceOf(MultiPhrasePrefixQuery.class))
-                    .or(instanceOf(TermQuery.class)).or(instanceOf(FuzzyQuery.class)));
+                    .or(instanceOf(TermQuery.class)).or(instanceOf(FuzzyQuery.class))
+                    .or(instanceOf(LegacyNumericRangeQuery.class)).or(instanceOf(PointRangeQuery.class)));
             break;
         }
 
@@ -139,8 +149,6 @@ public class MatchQueryBuilderTests extends AbstractQueryTestCase<MatchQueryBuil
                 queryValue = queryValue.toLowerCase(Locale.ROOT);
             }
             Query expectedTermQuery = fieldType.termQuery(queryValue, context);
-            // the real query will have boost applied, so we set it to our expeced as well
-            expectedTermQuery.setBoost(queryBuilder.boost());
             assertEquals(expectedTermQuery, query);
         }
 
@@ -174,10 +182,45 @@ public class MatchQueryBuilderTests extends AbstractQueryTestCase<MatchQueryBuil
             // depending on analyzer being set or not we can have term lowercased along the way, so to simplify test we just
             // compare lowercased terms here
             String originalTermLc = queryBuilder.value().toString().toLowerCase(Locale.ROOT);
-            String actualTermLc = fuzzyQuery.getTerm().text().toString().toLowerCase(Locale.ROOT);
-            assertThat(actualTermLc, equalTo(originalTermLc));
+            String actualTermLc = fuzzyQuery.getTerm().text().toLowerCase(Locale.ROOT);
+            Matcher<String> termLcMatcher = equalTo(originalTermLc);
+            if ("false".equals(originalTermLc) || "true".equals(originalTermLc)) {
+                // Booleans become t/f when querying a boolean field
+                termLcMatcher = either(termLcMatcher).or(equalTo(originalTermLc.substring(0, 1)));
+            }
+            assertThat(actualTermLc, termLcMatcher);
             assertThat(queryBuilder.prefixLength(), equalTo(fuzzyQuery.getPrefixLength()));
             assertThat(queryBuilder.fuzzyTranspositions(), equalTo(fuzzyQuery.getTranspositions()));
+        }
+
+        if (query instanceof LegacyNumericRangeQuery) {
+            // These are fuzzy numeric queries
+            assertTrue(queryBuilder.fuzziness() != null);
+            @SuppressWarnings("unchecked")
+            LegacyNumericRangeQuery<Number> numericRangeQuery = (LegacyNumericRangeQuery<Number>) query;
+            assertTrue(numericRangeQuery.includesMin());
+            assertTrue(numericRangeQuery.includesMax());
+
+            double value;
+            double width;
+            if (queryBuilder.fieldName().equals(DATE_FIELD_NAME) == false) {
+                value = Double.parseDouble(queryBuilder.value().toString());
+                if (queryBuilder.fuzziness().equals(Fuzziness.AUTO)) {
+                    width = 1;
+                } else {
+                    width = queryBuilder.fuzziness().asDouble();
+                }
+            } else {
+                value = ISODateTimeFormat.dateTimeParser().parseMillis(queryBuilder.value().toString());
+                width = queryBuilder.fuzziness().asTimeValue().getMillis();
+            }
+
+            assertEquals(value - width, numericRangeQuery.getMin().doubleValue(), width * .1);
+            assertEquals(value + width, numericRangeQuery.getMax().doubleValue(), width * .1);
+        }
+
+        if (query instanceof PointRangeQuery) {
+            // TODO
         }
     }
 
@@ -241,6 +284,134 @@ public class MatchQueryBuilderTests extends AbstractQueryTestCase<MatchQueryBuil
             fail("Expected QueryShardException");
         } catch (QueryShardException e) {
             assertThat(e.getMessage(), containsString("analyzer [bogusAnalyzer] not found"));
+        }
+    }
+
+    public void testSimpleMatchQuery() throws IOException {
+        String json = "{\n" +
+                "  \"match\" : {\n" +
+                "    \"message\" : {\n" +
+                "      \"query\" : \"to be or not to be\",\n" +
+                "      \"operator\" : \"AND\",\n" +
+                "      \"prefix_length\" : 0,\n" +
+                "      \"max_expansions\" : 50,\n" +
+                "      \"fuzzy_transpositions\" : true,\n" +
+                "      \"lenient\" : false,\n" +
+                "      \"zero_terms_query\" : \"ALL\",\n" +
+                "      \"boost\" : 1.0\n" +
+                "    }\n" +
+                "  }\n" +
+                "}";
+        MatchQueryBuilder qb = (MatchQueryBuilder) parseQuery(json);
+        checkGeneratedJson(json, qb);
+
+        assertEquals(json, "to be or not to be", qb.value());
+        assertEquals(json, Operator.AND, qb.operator());
+    }
+
+    public void testLegacyMatchPhrasePrefixQuery() throws IOException {
+        MatchQueryBuilder expectedQB = new MatchQueryBuilder("message", "to be or not to be");
+        expectedQB.type(Type.PHRASE_PREFIX);
+        expectedQB.slop(2);
+        expectedQB.maxExpansions(30);
+        String json = "{\n" +
+                "  \"match\" : {\n" +
+                "    \"message\" : {\n" +
+                "      \"query\" : \"to be or not to be\",\n" +
+                "      \"type\" : \"phrase_prefix\",\n" +
+                "      \"operator\" : \"OR\",\n" +
+                "      \"slop\" : 2,\n" +
+                "      \"prefix_length\" : 0,\n" +
+                "      \"max_expansions\" : 30,\n" +
+                "      \"fuzzy_transpositions\" : true,\n" +
+                "      \"lenient\" : false,\n" +
+                "      \"zero_terms_query\" : \"NONE\",\n" +
+                "      \"boost\" : 1.0\n" +
+                "    }\n" +
+                "  }\n" +
+                "}";
+        MatchQueryBuilder qb = (MatchQueryBuilder) parseQuery(json, ParseFieldMatcher.EMPTY);
+        checkGeneratedJson(json, qb);
+
+        assertEquals(json, expectedQB, qb);
+
+        assertSerialization(qb);
+
+        // Now check with strict parsing an exception is thrown
+        try {
+            parseQuery(json, ParseFieldMatcher.STRICT);
+            fail("Expected query to fail with strict parsing");
+        } catch (IllegalArgumentException e) {
+            assertThat(e.getMessage(),
+                    containsString("Deprecated field [type] used, replaced by [match_phrase and match_phrase_prefix query]"));
+        }
+    }
+
+    public void testLegacyMatchPhraseQuery() throws IOException {
+        MatchQueryBuilder expectedQB = new MatchQueryBuilder("message", "to be or not to be");
+        expectedQB.type(Type.PHRASE);
+        expectedQB.slop(2);
+        String json = "{\n" +
+                "  \"match\" : {\n" +
+                "    \"message\" : {\n" +
+                "      \"query\" : \"to be or not to be\",\n" +
+                "      \"type\" : \"phrase\",\n" +
+                "      \"operator\" : \"OR\",\n" +
+                "      \"slop\" : 2,\n" +
+                "      \"prefix_length\" : 0,\n" +
+                "      \"max_expansions\" : 50,\n" +
+                "      \"fuzzy_transpositions\" : true,\n" +
+                "      \"lenient\" : false,\n" +
+                "      \"zero_terms_query\" : \"NONE\",\n" +
+                "      \"boost\" : 1.0\n" +
+                "    }\n" +
+                "  }\n" +
+                "}";
+        MatchQueryBuilder qb = (MatchQueryBuilder) parseQuery(json, ParseFieldMatcher.EMPTY);
+        checkGeneratedJson(json, qb);
+
+        assertEquals(json, expectedQB, qb);
+
+        assertSerialization(qb);
+
+        // Now check with strict parsing an exception is thrown
+        try {
+            parseQuery(json, ParseFieldMatcher.STRICT);
+            fail("Expected query to fail with strict parsing");
+        } catch (IllegalArgumentException e) {
+            assertThat(e.getMessage(),
+                    containsString("Deprecated field [type] used, replaced by [match_phrase and match_phrase_prefix query]"));
+        }
+    }
+
+    public void testLegacyFuzzyMatchQuery() throws IOException {
+        MatchQueryBuilder expectedQB = new MatchQueryBuilder("message", "to be or not to be");
+        String type = randomFrom("fuzzy_match", "match_fuzzy");
+        String json = "{\n" +
+                "  \"" + type + "\" : {\n" +
+                "    \"message\" : {\n" +
+                "      \"query\" : \"to be or not to be\",\n" +
+                "      \"operator\" : \"OR\",\n" +
+                "      \"slop\" : 0,\n" +
+                "      \"prefix_length\" : 0,\n" +
+                "      \"max_expansions\" : 50,\n" +
+                "      \"fuzzy_transpositions\" : true,\n" +
+                "      \"lenient\" : false,\n" +
+                "      \"zero_terms_query\" : \"NONE\",\n" +
+                "      \"boost\" : 1.0\n" +
+                "    }\n" +
+                "  }\n" +
+                "}";
+        MatchQueryBuilder qb = (MatchQueryBuilder) parseQuery(json, ParseFieldMatcher.EMPTY);
+        assertThat(qb, equalTo(expectedQB));
+
+        // Now check with strict parsing an exception is thrown
+        try {
+            parseQuery(json, ParseFieldMatcher.STRICT);
+            fail("Expected query to fail with strict parsing");
+        } catch (IllegalArgumentException e) {
+            assertThat(e.getMessage(),
+                    containsString("Deprecated field [" + type + "] used, expected [match] instead"));
         }
     }
 }

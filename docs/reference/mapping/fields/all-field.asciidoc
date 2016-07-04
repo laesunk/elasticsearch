@@ -2,7 +2,7 @@
 === `_all` field
 
 The `_all` field is a special _catch-all_ field which concatenates the values
-of all of the other fields into one big string, which is then
+of all of the other fields into one big string, using space as a delimiter, which is then
 <<analysis,analyzed>> and indexed, but not stored.  This means that it can be
 searched, but not retrieved.
 
@@ -45,7 +45,7 @@ from each field as a string. It does not combine the _terms_ from each field.
 
 =============================================================================
 
-The `_all` field is just a <<string,`string`>> field, and accepts the same
+The `_all` field is just a <<text,`text`>> field, and accepts the same
 parameters that  other string fields accept, including `analyzer`,
 `term_vectors`, `index_options`, and `store`.
 
@@ -136,7 +136,7 @@ PUT my_index
       },
       "properties": {
         "content": {
-          "type": "string"
+          "type": "text"
         }
       }
     }
@@ -161,7 +161,7 @@ Individual fields can be included or excluded from the `_all` field with the
 [[all-field-and-boosting]]
 ==== Index boosting and the `_all` field
 
-Individual fields can be _boosted_ at index time, with the <<index-boost,`boost`>>
+Individual fields can be _boosted_ at index time, with the <<mapping-boost,`boost`>>
 parameter. The `_all` field takes these boosts into account:
 
 [source,js]
@@ -172,11 +172,11 @@ PUT myindex
     "mytype": {
       "properties": {
         "title": { <1>
-          "type": "string",
+          "type": "text",
           "boost": 2
         },
         "content": { <1>
-          "type": "string"
+          "type": "text"
         }
       }
     }
@@ -210,15 +210,15 @@ PUT myindex
     "mytype": {
       "properties": {
         "first_name": {
-          "type":    "string",
+          "type":    "text",
           "copy_to": "full_name" <1>
         },
         "last_name": {
-          "type":    "string",
+          "type":    "text",
           "copy_to": "full_name" <1>
         },
         "full_name": {
-          "type":    "string"
+          "type":    "text"
         }
       }
     }

@@ -24,11 +24,9 @@ esplugin {
 
 dependencies {
   compile "org.apache.lucene:lucene-analyzers-phonetic:${versions.lucene}"
+  compile "commons-codec:commons-codec:${versions.commonscodec}"
 }
 
 dependencyLicenses {
   mapping from: /lucene-.*/, to: 'lucene'
 }
-
-compileJava.options.compilerArgs << "-Xlint:-rawtypes,-unchecked"
-

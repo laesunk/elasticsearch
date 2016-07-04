@@ -19,16 +19,21 @@
 
 package org.elasticsearch.index.query;
 
+import org.apache.lucene.document.IntPoint;
 import org.apache.lucene.index.Term;
+import org.apache.lucene.search.BoostQuery;
 import org.apache.lucene.search.FuzzyQuery;
-import org.apache.lucene.search.NumericRangeQuery;
+import org.apache.lucene.search.LegacyNumericRangeQuery;
+import org.apache.lucene.search.PointRangeQuery;
 import org.apache.lucene.search.Query;
+import org.elasticsearch.Version;
 import org.elasticsearch.common.collect.Tuple;
 import org.elasticsearch.common.unit.Fuzziness;
 import org.hamcrest.Matchers;
 
 import java.io.IOException;
 
+import static org.hamcrest.Matchers.either;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.instanceOf;
 
@@ -59,7 +64,7 @@ public class FuzzyQueryBuilderTests extends AbstractQueryTestCase<FuzzyQueryBuil
     @Override
     protected void doAssertLuceneQuery(FuzzyQueryBuilder queryBuilder, Query query, QueryShardContext context) throws IOException {
         if (isNumericFieldName(queryBuilder.fieldName()) || queryBuilder.fieldName().equals(DATE_FIELD_NAME)) {
-            assertThat(query, instanceOf(NumericRangeQuery.class));
+            assertThat(query, either(instanceOf(LegacyNumericRangeQuery.class)).or(instanceOf(PointRangeQuery.class)));
         } else {
             assertThat(query, instanceOf(FuzzyQuery.class));
         }
@@ -116,12 +121,15 @@ public class FuzzyQueryBuilderTests extends AbstractQueryTestCase<FuzzyQueryBuil
                 "    }\n" +
                 "}";
         Query parsedQuery = parseQuery(query).toQuery(createShardContext());
-        assertThat(parsedQuery, instanceOf(FuzzyQuery.class));
-        FuzzyQuery fuzzyQuery = (FuzzyQuery) parsedQuery;
+        assertThat(parsedQuery, instanceOf(BoostQuery.class));
+        BoostQuery boostQuery = (BoostQuery) parsedQuery;
+        assertThat(boostQuery.getBoost(), equalTo(2.0f));
+        assertThat(boostQuery.getQuery(), instanceOf(FuzzyQuery.class));
+        FuzzyQuery fuzzyQuery = (FuzzyQuery) boostQuery.getQuery();
         assertThat(fuzzyQuery.getTerm(), equalTo(new Term(STRING_FIELD_NAME, "sh")));
         assertThat(fuzzyQuery.getMaxEdits(), equalTo(Fuzziness.AUTO.asDistance("sh")));
         assertThat(fuzzyQuery.getPrefixLength(), equalTo(1));
-        assertThat(fuzzyQuery.getBoost(), equalTo(2.0f));
+
     }
 
     public void testToQueryWithNumericField() throws IOException {
@@ -130,15 +138,37 @@ public class FuzzyQueryBuilderTests extends AbstractQueryTestCase<FuzzyQueryBuil
                 "    \"fuzzy\":{\n" +
                 "        \"" + INT_FIELD_NAME + "\":{\n" +
                 "            \"value\":12,\n" +
-                "            \"fuzziness\":5,\n" +
-                "            \"boost\":2.0\n" +
+                "            \"fuzziness\":5\n" +
                 "        }\n" +
                 "    }\n" +
                 "}\n";
         Query parsedQuery = parseQuery(query).toQuery(createShardContext());
-        assertThat(parsedQuery, instanceOf(NumericRangeQuery.class));
-        NumericRangeQuery fuzzyQuery = (NumericRangeQuery) parsedQuery;
-        assertThat(fuzzyQuery.getMin().longValue(), equalTo(7l));
-        assertThat(fuzzyQuery.getMax().longValue(), equalTo(17l));
+        Query expected;
+        if (getIndexVersionCreated().onOrAfter(Version.V_5_0_0_alpha2)) {
+            expected = IntPoint.newRangeQuery(INT_FIELD_NAME, 7, 17);
+        } else {
+            expected = LegacyNumericRangeQuery.newIntRange(INT_FIELD_NAME, 7, 17, true, true);
+        }
+        assertEquals(expected, parsedQuery);
+    }
+
+    public void testFromJson() throws IOException {
+        String json =
+                "{\n" + 
+                "  \"fuzzy\" : {\n" + 
+                "    \"user\" : {\n" + 
+                "      \"value\" : \"ki\",\n" + 
+                "      \"fuzziness\" : \"2\",\n" + 
+                "      \"prefix_length\" : 0,\n" + 
+                "      \"max_expansions\" : 100,\n" + 
+                "      \"transpositions\" : false,\n" + 
+                "      \"boost\" : 42.0\n" + 
+                "    }\n" + 
+                "  }\n" + 
+                "}";
+        FuzzyQueryBuilder parsed = (FuzzyQueryBuilder) parseQuery(json);
+        checkGeneratedJson(json, parsed);
+        assertEquals(json, 42.0, parsed.boost(), 0.00001);
+        assertEquals(json, 2, parsed.fuzziness().asInt());
     }
 }

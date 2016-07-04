@@ -33,13 +33,13 @@ import org.elasticsearch.cluster.routing.ShardRouting;
 import org.elasticsearch.cluster.routing.allocation.decider.ClusterRebalanceAllocationDecider;
 import org.elasticsearch.common.logging.ESLogger;
 import org.elasticsearch.common.logging.Loggers;
+import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.test.ESAllocationTestCase;
 
 import static org.elasticsearch.cluster.routing.ShardRoutingState.INITIALIZING;
 import static org.elasticsearch.cluster.routing.ShardRoutingState.RELOCATING;
 import static org.elasticsearch.cluster.routing.ShardRoutingState.STARTED;
 import static org.elasticsearch.cluster.routing.ShardRoutingState.UNASSIGNED;
-import static org.elasticsearch.common.settings.Settings.settingsBuilder;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.nullValue;
 
@@ -55,9 +55,9 @@ public class RebalanceAfterActiveTests extends ESAllocationTestCase {
             sizes[i] = randomIntBetween(0, Integer.MAX_VALUE);
         }
 
-        AllocationService strategy = createAllocationService(settingsBuilder()
-                        .put("cluster.routing.allocation.concurrent_recoveries", 10)
-                        .put(ClusterRebalanceAllocationDecider.CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE, "always")
+        AllocationService strategy = createAllocationService(Settings.builder()
+                        .put("cluster.routing.allocation.node_concurrent_recoveries", 10)
+                        .put(ClusterRebalanceAllocationDecider.CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE_SETTING.getKey(), "always")
                         .put("cluster.routing.allocation.cluster_concurrent_rebalance", -1)
                         .build(),
                 new ClusterInfoService() {
@@ -66,7 +66,7 @@ public class RebalanceAfterActiveTests extends ESAllocationTestCase {
                         return new ClusterInfo() {
                             @Override
                             public Long getShardSize(ShardRouting shardRouting) {
-                                if (shardRouting.index().equals("test")) {
+                                if (shardRouting.getIndexName().equals("test")) {
                                     return sizes[shardRouting.getId()];
                                 }
                                 return null;                    }
@@ -101,7 +101,7 @@ public class RebalanceAfterActiveTests extends ESAllocationTestCase {
         logger.info("start two nodes and fully start the shards");
         clusterState = ClusterState.builder(clusterState).nodes(DiscoveryNodes.builder().put(newNode("node1")).put(newNode("node2"))).build();
         RoutingTable prevRoutingTable = routingTable;
-        routingTable = strategy.reroute(clusterState).routingTable();
+        routingTable = strategy.reroute(clusterState, "reroute").routingTable();
         clusterState = ClusterState.builder(clusterState).routingTable(routingTable).build();
 
         for (int i = 0; i < routingTable.index("test").shards().size(); i++) {
@@ -129,7 +129,7 @@ public class RebalanceAfterActiveTests extends ESAllocationTestCase {
                 .put(newNode("node3")).put(newNode("node4")).put(newNode("node5")).put(newNode("node6")).put(newNode("node7")).put(newNode("node8")).put(newNode("node9")).put(newNode("node10")))
                 .build();
         prevRoutingTable = routingTable;
-        routingTable = strategy.reroute(clusterState).routingTable();
+        routingTable = strategy.reroute(clusterState, "reroute").routingTable();
         clusterState = ClusterState.builder(clusterState).routingTable(routingTable).build();
         routingNodes = clusterState.getRoutingNodes();
 
@@ -181,7 +181,7 @@ public class RebalanceAfterActiveTests extends ESAllocationTestCase {
         }
 
 
-        logger.info("complete relocation, thats it!");
+        logger.info("complete relocation, that's it!");
         routingNodes = clusterState.getRoutingNodes();
         prevRoutingTable = routingTable;
         routingTable = strategy.applyStartedShards(clusterState, routingNodes.shardsWithState(INITIALIZING)).routingTable();
